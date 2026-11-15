@@ -1,163 +1,69 @@
-# NexusFlow — Week 1 starter
+# NexusFlow: Visual IoT Telemetry & Rule Engine
 
-A beginner-friendly React + React Flow + Express + MongoDB Atlas + Socket.IO starter for the NexusFlow IoT telemetry project.
+Draw IoT rules on a canvas (Sensor → Moving Average → Threshold → SMS Alert). The Node.js backend compiles the graph into live RxJS streams and evaluates them against telemetry stored in MongoDB Time-Series collections.
 
-## Included in this starter
+## Run it
 
-- Express API with health check and telemetry endpoints
-- MongoDB native Time-Series collection creation (`telemetry`)
-- Single-reading and batch ingestion APIs
-- Socket.IO broadcasts for live readings
-- React Flow canvas with Sensor, Moving Average, and Alert nodes
-- Dashboard cards, recent readings, and a basic >80°C alert monitor
+Requires Node 18+ and MongoDB 5.0+ (`docker compose up -d` starts MongoDB 7).
 
-> Week 1 scope: this is a working foundation. The graph is currently a visual draft; Week 2 will add graph serialization and the RxJS compiler. The moving average shown on the dashboard is a preview, not yet a compiled graph operation. SMS is not sent in this starter.
-
-## Requirements
-
-- Node.js 20 LTS or newer
-- VS Code
-- MongoDB Atlas account and a database user
-- Git (optional)
-
-Check Node and npm in PowerShell:
-
-```powershell
-node -v
-npm -v
-```
-
-## 1. Configure MongoDB Atlas
-
-1. Create a free Atlas cluster.
-2. In **Database Access**, create a database user and save its username/password.
-3. In **Network Access**, add your current IP address for development.
-4. Open **Connect → Drivers**, choose Node.js, and copy the connection string.
-5. Replace `<username>`, `<password>`, and `<cluster-url>` in the connection string. If your password has special characters, URL-encode them.
-
-Do not share your connection string or commit it to Git.
-
-## 2. Configure the backend environment
-
-In PowerShell, from the NexusFlow root:
-
-```powershell
-Copy-Item .env.example server/.env
-```
-
-Open `server/.env` and set `MONGODB_URI` to your real Atlas URI. Keep `DB_NAME=nexusflow`.
-
-The backend creates a MongoDB Time-Series collection named `telemetry` on first startup. It uses `timestamp` as the time field and `metadata` as the meta field. It also configures 30-day automatic expiry for this development demo; change or remove `expireAfterSeconds` if your project needs longer retention.
-
-## 3. Install dependencies
-
-From the root folder:
-
-```powershell
-npm install
+```bash
 npm run install:all
+npm run dev:server      # API + WebSocket on :5000
+npm run dev:client      # UI on http://localhost:5173
 ```
 
-## 4. Run the app
+1. Open http://localhost:5173 and create an account.
+2. **Rule Builder** → *Example* → **Deploy**.
+3. **Live Dashboard** → **Start simulator**. Wires glow, nodes show live values, alerts appear.
+4. Production: `npm run build` then `npm start` (the server serves `client/dist`).
 
-From the root folder:
+Other commands: `npm test` (compiler unit tests), `npm run loadtest -- --rate 5000 --seconds 20` (ingestion audit).
 
-```powershell
-npm run dev
+## Architecture
+
+```
+React Flow canvas ──save/deploy──▶ Express API ──▶ Stream Compiler (RxJS)
+                                        ▲                │ Observables per node
+Devices ──POST /api/ingest | WS────▶ Ingestion buffer ──┴──▶ rule engine ──▶ SMS / Webhook
+                                        │ batched insertMany
+                                        ▼
+                         MongoDB time-series collection `telemetry`
+Live dashboard ◀── WebSocket (/ws): telemetry, node activity, alerts, stats
 ```
 
-- Frontend: http://localhost:5173
-- Backend health: http://localhost:5000/api/health
+## Ingestion API
 
-Keep this terminal open. Stop both services with `Ctrl+C`.
-
-### Preview the frontend without a backend
-
-To see the dashboard without setting up MongoDB or starting the API, run this from the project root:
-
-```powershell
-npm run demo
+```bash
+curl -X POST localhost:5000/api/ingest -H 'Content-Type: application/json' \
+  -d '[{"deviceId":"turbine-1","metric":"temperature","value":91.2},
+       {"deviceId":"turbine-2","readings":{"temperature":70.1,"rpm":3010}}]'
 ```
+WebSocket devices connect to `/ws?device=1` (or `?key=INGEST_KEY`) and send `{"type":"telemetry","data":[...]}`. Set `INGEST_KEY` in `server/.env` to require `x-api-key`.
 
-Open http://localhost:5173. Demo mode uses sample telemetry readings and does not connect to the backend or database.
+## Feature checklist (vs. the project brief)
 
-## 5. Send a test telemetry point
+| Brief requirement | Where |
+|---|---|
+| **Visual Graph Builder** (React + React Flow), drag-and-drop, non-technical users | `client/src/pages/Builder.jsx`: palette, canvas, minimap, inspector, cycle-proof wiring |
+| Node library: Data Sources, Math Operations, Action Triggers | `client/src/nodeDefs.js`: Sensor, Moving Average, Math, Threshold, Logic Gate (AND/OR), Cooldown, SMS Alert, Webhook |
+| **Graph serialization** to valid JSON | Builder → **JSON** tab (live view), Export/Import `.json`, server-side validation |
+| **Time-Series DB** (MongoDB 5.0+), high-ingest, append-only | `server/src/models.js` creates a native time-series collection (`timeField`, `metaField`, retention TTL) |
+| **Ingestion API** (Express + WebSockets), 5,000 writes/sec | `server/src/ingest.js`: in-memory buffer, batched unordered `insertMany`; `scripts/loadtest.js`; live "Writes / sec" + storage footprint cards |
+| **Stream Compiler** (Node + RxJS): JSON graph → Observables | `server/src/compiler.js`: validate, topological build, shared streams, moving average via `scan`, AND via `combineLatest` |
+| **Live rule execution**: WebSocket telemetry through compiled pipelines, in memory | `server/src/engine.js` + `ingest.js` feed one `Subject`; rules deploy/undeploy/hot-reload without restart; active rules resume on boot |
+| **Live dashboards** (Recharts) subscribing to WebSocket | `client/src/pages/Dashboard.jsx` |
+| **Webhooks & alerting** (external API / mock SMS) | `server/src/actions.js`: templated messages, 5 s timeout, per-node cooldown, persisted alert log; `Alerts` page + toasts |
+| **Visual feedback**: wires glow when data passes | Server coalesces node activity → `fires` messages → glowing edges, pulsing nodes, live value badges |
+| Factory manager login | JWT auth (register/login), per-user rules |
+| Extras | Validation panel, example rule, simulator, device registry, dirty-state tracking, unit tests |
 
-Open a second PowerShell terminal:
+## Demo script for the reviews
 
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri http://localhost:5000/api/telemetry `
-  -ContentType "application/json" `
-  -Body '{"sensorId":"TURBINE-01","temperature":76.5}'
-```
+- **Mid-project review**: run `npm run loadtest -- --rate 5000`, show *Writes / sec* and *Storage footprint / bytes per point* on the dashboard (or `GET /api/stats`). Show the **JSON** tab and the *Export* file for graph serialization.
+- **Final review**: deploy the example, start the simulator, watch an overheating burst light up the wires and fire SMS + webhook; edit the threshold and press *Save* to hot-reload the live rule.
 
-Send an alert-threshold reading:
+## Notes
 
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri http://localhost:5000/api/telemetry `
-  -ContentType "application/json" `
-  -Body '{"sensorId":"TURBINE-01","temperature":86.2}'
-```
-
-The dashboard should update without refreshing. A reading above 80°C appears in the alert monitor.
-
-## 6. Send a batch
-
-```powershell
-$body = @{
-  readings = @(
-    @{ sensorId = "TURBINE-01"; temperature = 72.4 },
-    @{ sensorId = "TURBINE-01"; temperature = 78.1 },
-    @{ sensorId = "TURBINE-01"; temperature = 83.7 }
-  )
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod -Method Post `
-  -Uri http://localhost:5000/api/telemetry/batch `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-## API reference
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/health` | Check API status |
-| POST | `/api/telemetry` | Insert one reading |
-| POST | `/api/telemetry/batch` | Insert 1–1000 readings |
-| GET | `/api/telemetry/latest?limit=50` | Fetch recent readings |
-
-Single-reading JSON:
-
-```json
-{
-  "sensorId": "TURBINE-01",
-  "temperature": 76.5,
-  "unit": "C",
-  "deviceType": "turbine"
-}
-```
-
-## Troubleshooting
-
-- **MongoServerSelectionError:** Check Atlas Network Access, cluster status, URI, username, and password.
-- **Authentication failed:** Recheck the database user credentials; they are different from your Atlas website login.
-- **Frontend says API offline:** Make sure the backend terminal is running on port 5000.
-- **Port already in use:** Stop the other process or change `PORT` in `server/.env`.
-- **Time-Series collection already exists:** The startup code detects and reuses it. If you created a normal collection named `telemetry` earlier, drop it in the Atlas UI only if it contains no data you need, then restart.
-
-## Week 1 completion checks
-
-- [ ] Atlas connection succeeds
-- [ ] Time-Series `telemetry` collection exists
-- [ ] Health endpoint returns `status: ok`
-- [ ] Single and batch readings are inserted
-- [ ] React Flow canvas loads and nodes can be connected
-- [ ] Dashboard receives live Socket.IO telemetry
-- [ ] A reading above 80°C produces an alert indicator
-
-## Important performance note
-
-Do not claim 5,000 writes/second based on this starter. That target needs a controlled load test, appropriate Atlas tier, indexes/schema tuning, batched writes, and measured results. Establish a baseline first, then optimize and document the actual throughput.
+- SMS is mocked (logged + stored). Replace the `console.log` in `server/src/actions.js` with Twilio or MSG91.
+- The webhook example points at `https://httpbin.org/post`; use your own endpoint in production.
+- Change `JWT_SECRET` before deploying.

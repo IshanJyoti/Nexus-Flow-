@@ -1,19 +1,23 @@
 {
   "name": "nexusflow-server",
   "version": "1.0.0",
-  "type": "module",
+  "description": "NexusFlow backend: time-series ingestion, RxJS rule compiler, WebSocket hub",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "loadtest": "node scripts/loadtest.js",
+    "test": "node --test"
   },
+  "engines": { "node": ">=18" },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "mongodb": "^6.12.0",
-    "socket.io": "^4.8.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.7"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1",
+    "rxjs": "^7.8.1",
+    "ws": "^8.18.0"
   }
 }
