@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, getToken } from './api';
+import { api, getToken, setUnauthorizedHandler } from './api';
 import { LiveProvider, useLive } from './LiveContext';
 import { ToastProvider, useToast } from './Toast';
 import Login from './components/Login';
@@ -34,20 +34,27 @@ function Shell({ user, onLogout }) {
 export default function App() {
   const [token, setToken] = useState(getToken());
   const [user, setUser] = useState(null);
+  const [authNotice, setAuthNotice] = useState('');
   const [checking, setChecking] = useState(!!getToken());
+
+  useEffect(() => setUnauthorizedHandler(() => {
+    setUser(null);
+    setToken(null);
+    setAuthNotice('Your session expired. Please sign in again.');
+  }), []);
 
   useEffect(() => {
     if (!token) { setChecking(false); return; }
     api.me().then((r) => setUser(r.user)).catch(() => { localStorage.removeItem('nf_token'); setToken(null); }).finally(() => setChecking(false));
   }, [token]);
 
-  const onAuth = ({ token: t, user: u }) => { localStorage.setItem('nf_token', t); setUser(u); setToken(t); };
-  const onLogout = () => { localStorage.removeItem('nf_token'); setToken(null); setUser(null); };
+  const onAuth = ({ token: t, user: u }) => { localStorage.setItem('nf_token', t); setUser(u); setAuthNotice(''); setToken(t); };
+  const onLogout = () => { localStorage.removeItem('nf_token'); setToken(null); setUser(null); setAuthNotice(''); };
 
   if (checking) return <div className="splash">Loading NexusFlow…</div>;
   return (
     <ToastProvider>
-      {!token ? <Login onAuth={onAuth} /> : (
+      {!token ? <Login onAuth={onAuth} notice={authNotice} /> : (
         <LiveProvider token={token}>
           <Shell user={user} onLogout={onLogout} />
         </LiveProvider>

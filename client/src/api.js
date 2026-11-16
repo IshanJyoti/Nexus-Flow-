@@ -1,5 +1,13 @@
 export const getToken = () => localStorage.getItem('nf_token');
 
+let unauthorizedHandler = () => {};
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler;
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = () => {};
+  };
+}
+
 async function req(path, { method = 'GET', body } = {}) {
   const token = getToken();
   const res = await fetch(`/api${path}`, {
@@ -9,6 +17,10 @@ async function req(path, { method = 'GET', body } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 && token && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
+      localStorage.removeItem('nf_token');
+      unauthorizedHandler();
+    }
     const err = new Error(data.error || res.statusText);
     err.status = res.status;
     err.errors = data.errors;
