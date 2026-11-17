@@ -12,6 +12,11 @@ import { CATEGORIES, NODE_DEFS, makeNode, buildTemplate } from '../nodeDefs';
 
 const nodeTypes = Object.fromEntries(Object.keys(NODE_DEFS).map((t) => [t, FlowNode]));
 const decorate = (e) => ({ ...e, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' } });
+const graphData = (name, nodes = [], edges = []) => ({
+  name,
+  nodes: nodes.map(({ id, type, position, data }) => ({ id, type, position: { x: Math.round(position.x), y: Math.round(position.y) }, data })),
+  edges: edges.map(({ id, source, target }) => ({ id, source, target })),
+});
 const reaches = (edges, from, to) => {
   const seen = new Set(); const stack = [from];
   while (stack.length) {
@@ -24,7 +29,7 @@ const reaches = (edges, from, to) => {
   return false;
 };
 
-export default function Builder() {
+export default function Builder({ userId }) {
   const toast = useToast();
   const { glow, devices, resetNodeValues } = useLive();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -35,14 +40,11 @@ export default function Builder() {
   const [panel, setPanel] = useState('inspect');
   const [issues, setIssues] = useState(null);
   const [saved, setSaved] = useState('');
+  const [loadedForUser, setLoadedForUser] = useState(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
 
-  const serialize = useCallback(() => ({
-    name: meta.name,
-    nodes: nodes.map(({ id, type, position, data }) => ({ id, type, position: { x: Math.round(position.x), y: Math.round(position.y) }, data })),
-    edges: edges.map(({ id, source, target }) => ({ id, source, target })),
-  }), [nodes, edges, meta.name]);
+  const serialize = useCallback(() => graphData(meta.name, nodes, edges), [nodes, edges, meta.name]);
 
   const snapshot = useMemo(() => JSON.stringify(serialize()), [serialize]);
   const dirty = snapshot !== saved;
@@ -50,7 +52,86 @@ export default function Builder() {
   const selNode = selected.length === 1 ? selected[0] : null;
 
   const refreshList = useCallback(() => api.graphs().then(setGraphs).catch(() => {}), []);
-  useEffect(() => { refreshList(); }, [refreshList]);
+  useEffect(() => {
+    if (!userId) return undefined;
+    let cancelled = false;
+    const draftKey = `nf_builder_draft:${userId}`;
+    let draft = null;
+
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const valid = parsed?.version === 1
+          && (parsed.id == null || typeof parsed.id === 'string')
+          && typeof parsed.name === 'string'
+          && Array.isArray(parsed.nodes)
+          && parsed.nodes.every((n) => n && typeof n.id === 'string' && typeof n.type === 'string'
+            && n.position && Number.isFinite(n.position.x) && Number.isFinite(n.position.y)
+            && n.data && typeof n.data === 'object')
+          && Array.isArray(parsed.edges)
+          && parsed.edges.every((e) => e && typeof e.id === 'string' && typeof e.source === 'string' && typeof e.target === 'string')
+          && typeof parsed.saved === 'string';
+        if (valid) draft = parsed;
+        else {
+          localStorage.removeItem(draftKey);
+          toast('The saved builder draft was invalid and could not be restored.', 'error');
+        }
+      }
+    } catch (e) {
+      toast(`Could not read the saved builder draft: ${e.message}`, 'error');
+    }
+
+    const restore = (graph, baseline, active) => {
+      const restoredNodes = (graph.nodes || []).map((n) => ({ ...n, selected: false }));
+      const restoredEdges = (graph.edges || []).map(decorate);
+      setNodes(restoredNodes);
+      setEdges(restoredEdges);
+      setMeta({ id: graph.id || null, name: graph.name || 'Untitled rule', active: !!active });
+      setSaved(baseline);
+      resetNodeValues();
+    };
+
+    api.graphs().then((list) => {
+      if (cancelled) return;
+      setGraphs(list);
+      if (draft) {
+        const serverGraph = list.find((g) => g.id === draft.id);
+        restore({ ...draft, id: serverGraph ? draft.id : null }, draft.saved, serverGraph?.active);
+      } else if (list.length) {
+        const graph = list[0];
+        restore(graph, JSON.stringify(graphData(graph.name || 'Untitled rule', graph.nodes || [], graph.edges || [])), graph.active);
+      } else {
+        restore({ name: 'Untitled rule', nodes: [], edges: [] }, JSON.stringify(graphData('Untitled rule')), false);
+      }
+      setLoadedForUser(userId);
+    }).catch((e) => {
+      if (cancelled) return;
+      toast(`Could not load saved rules: ${e.message}`, 'error');
+      if (draft) restore(draft, draft.saved, false);
+      else restore({ name: 'Untitled rule', nodes: [], edges: [] }, JSON.stringify(graphData('Untitled rule')), false);
+      setLoadedForUser(userId);
+    });
+
+    return () => { cancelled = true; };
+  }, [userId, resetNodeValues, setNodes, setEdges, toast]);
+
+  useEffect(() => {
+    if (!userId || loadedForUser !== userId) return;
+    const body = serialize();
+    try {
+      localStorage.setItem(`nf_builder_draft:${userId}`, JSON.stringify({
+        version: 1,
+        id: meta.id,
+        name: meta.name,
+        nodes: body.nodes,
+        edges: body.edges,
+        saved,
+      }));
+    } catch (e) {
+      toast(`Could not autosave the builder draft: ${e.message}`, 'error');
+    }
+  }, [userId, loadedForUser, serialize, meta.id, meta.name, saved, toast]);
 
   const applyGraph = useCallback((g, markSaved = true) => {
     const ns = (g.nodes || []).map((n) => ({ ...n, selected: false }));
@@ -58,11 +139,7 @@ export default function Builder() {
     setNodes(ns); setEdges(es);
     setMeta({ id: g.id || null, name: g.name || 'Untitled rule', active: !!g.active });
     setIssues(null); resetNodeValues();
-    if (markSaved) setSaved(JSON.stringify({
-      name: g.name || 'Untitled rule',
-      nodes: ns.map(({ id, type, position, data }) => ({ id, type, position: { x: Math.round(position.x), y: Math.round(position.y) }, data })),
-      edges: es.map(({ id, source, target }) => ({ id, source, target })),
-    }));
+    if (markSaved) setSaved(JSON.stringify(graphData(g.name || 'Untitled rule', ns, es)));
     setTimeout(() => rf && rf.fitView({ padding: 0.2, duration: 400 }), 60);
   }, [rf, setNodes, setEdges, resetNodeValues]);
 
@@ -159,6 +236,8 @@ export default function Builder() {
 
   /* wires glow while data passes through the node they leave */
   const shownEdges = useMemo(() => edges.map((e) => (glow.has(e.source) ? { ...e, className: 'glow', animated: true } : e)), [edges, glow]);
+
+  if (!userId || loadedForUser !== userId) return <div className="splash">Restoring your rule…</div>;
 
   return (
     <div className="builder">

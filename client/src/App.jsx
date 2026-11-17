@@ -23,7 +23,7 @@ function Shell({ user, onLogout }) {
       <Topbar tab={tab} setTab={setTab} user={user} onLogout={onLogout} />
       <main>
         {/* Builder stays mounted so your canvas isn't lost when switching tabs */}
-        <div className="page" hidden={tab !== 'builder'}><Builder /></div>
+        <div className="page" hidden={tab !== 'builder'}><Builder userId={user?.id} /></div>
         {tab === 'dashboard' && <div className="page"><Dashboard /></div>}
         {tab === 'alerts' && <div className="page"><Alerts /></div>}
       </main>
