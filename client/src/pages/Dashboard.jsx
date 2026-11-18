@@ -43,6 +43,8 @@ export default function Dashboard() {
     return { rows: [...map.values()].sort((a, b) => a.t - b.t).slice(-100), lines: ids };
   }, [series, metric, deviceIds]);
 
+  const hasDashboardData = deviceIds.length > 0 || rows.length > 0 || (stats?.total ?? 0) > 0;
+
   const toggleSim = async () => {
     try { setSim(sim.running ? await api.stopSim() : await api.startSim(cfg)); } catch (e) { toast(e.message, 'error'); }
   };
@@ -68,58 +70,73 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="stat-grid">
-        {cards.map(({ icon: I, label, value, sub, tone }) => (
-          <div key={label} className={`card stat ${tone}`}>
-            <span className="stat-icon"><I size={17} /></span>
-            <div><small>{label}</small><b>{value}</b>{sub && <em>{sub}</em>}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card chart-card">
-        <div className="card-head">
-          <h3>Telemetry by device</h3>
-          <div className="seg compact">
-            {metrics.map((m) => <button key={m} className={metric === m ? 'on' : ''} onClick={() => setMetric(m)}>{m}</button>)}
-          </div>
+      {!hasDashboardData ? (
+        <div className="card empty-card dashboard-empty">
+          <Radio size={28} />
+          <h3>{sim.running ? 'Waiting for telemetry' : 'No dashboard data yet'}</h3>
+          <p>{sim.running
+            ? 'The simulator is running, but no readings have arrived yet. Check the live connection status above.'
+            : <>Start the simulator to generate live readings, or connect a device and send data to <code>/api/ingest</code>.</>}</p>
+          <button className={`btn ${sim.running ? 'danger' : 'primary'}`} onClick={toggleSim}>
+            {sim.running ? <><Square size={13} /> Stop simulator</> : <><Play size={13} /> Start simulator</>}
+          </button>
         </div>
-        {!rows.length ? (
-          <div className="chart-empty"><Radio size={26} /><p>No data yet. Press <b>Start simulator</b> or POST readings to <code>/api/ingest</code>.</p></div>
-        ) : (
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={rows} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
-              <CartesianGrid stroke="#1e2a47" strokeDasharray="3 3" />
-              <XAxis dataKey="t" tickFormatter={(t) => new Date(t).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })} stroke="#5b6b8c" fontSize={11} minTickGap={40} />
-              <YAxis stroke="#5b6b8c" fontSize={11} domain={['auto', 'auto']} />
-              <Tooltip contentStyle={{ background: '#0f1629', border: '1px solid #26324f', borderRadius: 10, fontSize: 12 }} labelFormatter={(t) => new Date(t).toLocaleTimeString()} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {lines.map((id, i) => <Line key={id} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />)}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="card-head"><h3>Devices</h3><span className="muted small">{deviceIds.length} total</span></div>
-        {!deviceIds.length ? <p className="muted">No devices have reported yet.</p> : (
-          <div className="device-grid">
-            {deviceIds.slice(0, 24).map((id) => {
-              const d = devices[id];
-              const online = d.lastSeen && Date.now() - d.lastSeen < 5000;
-              return (
-                <div key={id} className="device">
-                  <div className="device-head"><b>{id}</b><span className={`pill ${online ? 'ok' : 'muted-pill'}`}>{online ? 'online' : 'idle'}</span></div>
-                  {Object.entries(d.metrics).map(([m, v]) => (
-                    <div key={m} className="kv"><span>{m}</span><b>{v.value == null ? '—' : v.value.toFixed(m === 'rpm' ? 0 : 2)}</b></div>
-                  ))}
-                </div>
-              );
-            })}
+      ) : (
+        <>
+          <div className="stat-grid">
+            {cards.map(({ icon: I, label, value, sub, tone }) => (
+              <div key={label} className={`card stat ${tone}`}>
+                <span className="stat-icon"><I size={17} /></span>
+                <div><small>{label}</small><b>{value}</b>{sub && <em>{sub}</em>}</div>
+              </div>
+            ))}
           </div>
-        )}
-        {deviceIds.length > 24 && <p className="muted small">+{deviceIds.length - 24} more devices not shown.</p>}
-      </div>
+
+          <div className="card chart-card">
+            <div className="card-head">
+              <h3>Telemetry by device</h3>
+              <div className="seg compact">
+                {metrics.map((m) => <button key={m} className={metric === m ? 'on' : ''} onClick={() => setMetric(m)}>{m}</button>)}
+              </div>
+            </div>
+            {!rows.length ? (
+              <div className="chart-empty"><Radio size={26} /><p>No data yet. Press <b>Start simulator</b> or POST readings to <code>/api/ingest</code>.</p></div>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={rows} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+                  <CartesianGrid stroke="#1e2a47" strokeDasharray="3 3" />
+                  <XAxis dataKey="t" tickFormatter={(t) => new Date(t).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })} stroke="#5b6b8c" fontSize={11} minTickGap={40} />
+                  <YAxis stroke="#5b6b8c" fontSize={11} domain={['auto', 'auto']} />
+                  <Tooltip contentStyle={{ background: '#0f1629', border: '1px solid #26324f', borderRadius: 10, fontSize: 12 }} labelFormatter={(t) => new Date(t).toLocaleTimeString()} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {lines.map((id, i) => <Line key={id} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />)}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-head"><h3>Devices</h3><span className="muted small">{deviceIds.length} total</span></div>
+            {!deviceIds.length ? <p className="muted">No devices have reported yet.</p> : (
+              <div className="device-grid">
+                {deviceIds.slice(0, 24).map((id) => {
+                  const d = devices[id];
+                  const online = d.lastSeen && Date.now() - d.lastSeen < 5000;
+                  return (
+                    <div key={id} className="device">
+                      <div className="device-head"><b>{id}</b><span className={`pill ${online ? 'ok' : 'muted-pill'}`}>{online ? 'online' : 'idle'}</span></div>
+                      {Object.entries(d.metrics).map(([m, v]) => (
+                        <div key={m} className="kv"><span>{m}</span><b>{v.value == null ? '—' : v.value.toFixed(m === 'rpm' ? 0 : 2)}</b></div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {deviceIds.length > 24 && <p className="muted small">+{deviceIds.length - 24} more devices not shown.</p>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

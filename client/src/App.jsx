@@ -45,13 +45,21 @@ export default function App() {
 
   useEffect(() => {
     if (!token) { setChecking(false); return; }
+    setChecking(true);
     api.me().then((r) => setUser(r.user)).catch(() => { localStorage.removeItem('nf_token'); setToken(null); }).finally(() => setChecking(false));
   }, [token]);
 
   const onAuth = ({ token: t, user: u }) => { localStorage.setItem('nf_token', t); setUser(u); setAuthNotice(''); setToken(t); };
   const onLogout = () => { localStorage.removeItem('nf_token'); setToken(null); setUser(null); setAuthNotice(''); };
 
-  if (checking) return <div className="splash">Loading NexusFlow…</div>;
+  if (checking) return (
+    <div className="splash" role="status" aria-live="polite">
+      <div className="session-loading">
+        <span className="session-loading-spinner" aria-hidden="true" />
+        <span>Checking your session…</span>
+      </div>
+    </div>
+  );
   return (
     <ToastProvider>
       {!token ? <Login onAuth={onAuth} notice={authNotice} /> : (

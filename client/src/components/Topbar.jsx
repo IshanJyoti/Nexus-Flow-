@@ -23,7 +23,10 @@ export default function Topbar({ tab, setTab, user, onLogout }) {
       </nav>
       <div className="top-right">
         <span className="pill muted-pill">{stats?.rules ?? 0} active rule{stats?.rules === 1 ? '' : 's'}</span>
-        <span className={`pill ${connected ? 'ok' : 'bad'}`}>{connected ? <Wifi size={13} /> : <WifiOff size={13} />} {connected ? 'Live' : 'Offline'}</span>
+        <span className={`pill ${connected ? 'ok' : 'bad'}`} role="status" aria-live="polite">
+          {connected ? <Wifi size={13} /> : <WifiOff size={13} />}
+          {connected ? 'Connected' : 'Disconnected'}
+        </span>
         <span className="user">{user?.name || user?.email}</span>
         <button className="icon-btn" title="Sign out" onClick={onLogout}><LogOut size={16} /></button>
       </div>

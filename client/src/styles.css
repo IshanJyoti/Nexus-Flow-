@@ -13,6 +13,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .muted { color: var(--muted); } .small { font-size: 12px; } .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .spacer { flex: 1; }
 .splash { height: 100%; display: grid; place-items: center; color: var(--muted); }
+.session-loading { display: flex; align-items: center; gap: 10px; }
+.session-loading-spinner { width: 18px; height: 18px; border: 2px solid var(--line2); border-top-color: var(--accent2); border-radius: 50%; animation: session-spin .8s linear infinite; }
+@keyframes session-spin { to { transform: rotate(360deg); } }
 
 /* buttons & inputs */
 button { font: inherit; color: inherit; cursor: pointer; }
