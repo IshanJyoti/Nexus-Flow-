@@ -8,7 +8,9 @@ export default function Alerts() {
   const { alerts, setAlerts } = useLive();
   const toast = useToast();
   const [filter, setFilter] = useState('all');
-  const list = alerts.filter((a) => filter === 'all' || a.status === filter);
+  const [channelFilter, setChannelFilter] = useState('all');
+  const list = alerts.filter((a) => (filter === 'all' || a.status === filter)
+    && (channelFilter === 'all' || a.channel === channelFilter));
 
   const clear = async () => {
     if (!window.confirm('Clear the entire alert history?')) return;
@@ -20,14 +22,21 @@ export default function Alerts() {
       <div className="page-head">
         <div><h2>Alert history</h2><p className="muted">Every SMS and webhook your rules have triggered, newest first.</p></div>
         <div className="head-actions">
-          <div className="seg compact">
-            {['all', 'sent', 'failed'].map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>)}
+          <div className="seg compact" role="group" aria-label="Filter alerts by status">
+            {['all', 'sent', 'failed'].map((f) => <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>)}
+          </div>
+          <div className="seg compact" role="group" aria-label="Filter alerts by channel">
+            {[
+              { value: 'all', label: 'All channels' },
+              { value: 'sms', label: 'SMS' },
+              { value: 'webhook', label: 'Webhook' },
+            ].map(({ value, label }) => <button key={value} className={channelFilter === value ? 'on' : ''} aria-pressed={channelFilter === value} onClick={() => setChannelFilter(value)}>{label}</button>)}
           </div>
           <button className="btn ghost" onClick={clear} disabled={!alerts.length}><Trash2 size={14} /> Clear</button>
         </div>
       </div>
       {!list.length ? (
-        <div className="card empty-card"><BellOff size={28} /><h3>No alerts yet</h3><p className="muted">Deploy a rule and start the simulator on the dashboard. Alerts appear here the moment a rule fires.</p></div>
+        <div className="card empty-card"><BellOff size={28} /><h3>{alerts.length ? 'No matching alerts' : 'No alerts yet'}</h3><p className="muted">{alerts.length ? 'Try changing the status or channel filters.' : 'Deploy a rule and start the simulator on the dashboard. Alerts appear here the moment a rule fires.'}</p></div>
       ) : (
         <div className="card table-card">
           <table>
