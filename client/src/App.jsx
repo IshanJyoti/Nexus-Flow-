@@ -7,6 +7,7 @@ import Topbar from './components/Topbar';
 import Builder from './pages/Builder';
 import Dashboard from './pages/Dashboard';
 import Alerts from './pages/Alerts';
+import DeviceManagement from './pages/DeviceManagement';
 
 function Shell({ user, onLogout }) {
   const [tab, setTab] = useState('builder');
@@ -26,6 +27,7 @@ function Shell({ user, onLogout }) {
         <div className="page" hidden={tab !== 'builder'}><Builder userId={user?.id} /></div>
         {tab === 'dashboard' && <div className="page"><Dashboard /></div>}
         {tab === 'alerts' && <div className="page"><Alerts /></div>}
+        {tab === 'devices' && <div className="page"><DeviceManagement /></div>}
       </main>
     </div>
   );

@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const config = require('./config');
-const { Graph, ensureTelemetryCollection } = require('./models');
+const { Graph, Device, ensureTelemetryCollection } = require('./models');
 const engine = require('./engine');
 const ingest = require('./ingest');
 const hub = require('./hub');
@@ -16,6 +16,20 @@ async function main() {
   console.log('[db] connected');
   const telemetry = await ensureTelemetryCollection(mongoose.connection.db, config.retentionDays);
   await ingest.init(telemetry);
+  ingest.events.on('accepted', (points) => {
+    const latest = new Map();
+    for (const point of points) {
+      const previous = latest.get(point.deviceId) || 0;
+      if (point.ts > previous) latest.set(point.deviceId, point.ts);
+    }
+    if (!latest.size) return;
+    Device.bulkWrite([...latest].map(([deviceId, timestamp]) => ({
+      updateOne: {
+        filter: { deviceId, active: true },
+        update: { $max: { lastSeen: new Date(timestamp) } },
+      },
+    })), { ordered: false }).catch((error) => console.error('[devices] last-seen update failed:', error.message));
+  });
 
   const app = express();
   app.use(cors());

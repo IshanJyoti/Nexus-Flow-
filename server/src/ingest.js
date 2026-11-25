@@ -3,6 +3,8 @@
  * time-series collection, while simultaneously feeding the rule engine.
  */
 const engine = require('./engine');
+const { EventEmitter } = require('events');
+const events = new EventEmitter();
 
 let collection = null;
 const buffer = [];
@@ -27,11 +29,16 @@ const expand = (raw) => {
 function normalize(raw) {
   if (!raw) return null;
   const deviceId = String(raw.deviceId ?? '').trim();
+  const metric = String(raw.metric ?? '').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$/.test(deviceId)) return null;
+  if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(metric)) return null;
+  if (raw.value === '' || raw.value === null || raw.value === undefined) return null;
   const value = Number(raw.value);
-  if (!deviceId || raw.value === '' || raw.value === null || !Number.isFinite(value)) return null;
-  const metric = String(raw.metric || 'value');
-  const parsed = raw.timestamp ? new Date(raw.timestamp).getTime() : Date.now();
-  return { deviceId, metric, value, ts: Number.isFinite(parsed) ? parsed : Date.now() };
+  if (!Number.isFinite(value)) return null;
+  const hasTimestamp = raw.timestamp !== undefined && raw.timestamp !== null && raw.timestamp !== '';
+  const parsed = hasTimestamp ? new Date(raw.timestamp).getTime() : Date.now();
+  if (!Number.isFinite(parsed)) return null;
+  return { deviceId, metric, value, ts: parsed };
 }
 
 function accept(rawInput) {
@@ -59,6 +66,7 @@ function accept(rawInput) {
     counters.dropped += over;
   }
   counters.total += points.length;
+  if (points.length) events.emit('accepted', points);
   counters.rejected += rejected;
   secCount += points.length;
   engine.ingest(points);
@@ -105,4 +113,4 @@ const drainLive = () => { const out = [...liveLatest.values()]; liveLatest.clear
 const listDevices = () => [...devices.values()];
 const stats = () => ({ ...counters, writesPerSec, buffered: buffer.length, devices: devices.size });
 
-module.exports = { init, accept, flush, drainLive, listDevices, stats, getCollection: () => collection };
+module.exports = { init, accept, flush, drainLive, listDevices, stats, events, getCollection: () => collection };

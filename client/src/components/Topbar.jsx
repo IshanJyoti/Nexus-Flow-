@@ -1,9 +1,10 @@
-import { Workflow, LayoutDashboard, Bell, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Workflow, LayoutDashboard, Bell, LogOut, Wifi, WifiOff, Cpu } from 'lucide-react';
 import { useLive } from '../LiveContext';
 
 const TABS = [
   { id: 'builder', label: 'Rule Builder', icon: Workflow },
   { id: 'dashboard', label: 'Live Dashboard', icon: LayoutDashboard },
+  { id: 'devices', label: 'Devices', icon: Cpu },
   { id: 'alerts', label: 'Alerts', icon: Bell },
 ];
 

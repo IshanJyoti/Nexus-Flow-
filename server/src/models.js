@@ -15,6 +15,18 @@ const Graph = mongoose.model('Graph', new Schema({
   active: { type: Boolean, default: false },
 }, { timestamps: true }));
 
+const Device = mongoose.model('Device', new Schema({
+  owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  deviceId: { type: String, required: true, unique: true, trim: true, minlength: 2, maxlength: 64 },
+  name: { type: String, required: true, trim: true, maxlength: 80 },
+  description: { type: String, default: '', trim: true, maxlength: 500 },
+  location: { type: String, default: '', trim: true, maxlength: 120 },
+  apiKeyHash: { type: String, required: true, select: false },
+  apiKeyPrefix: { type: String, required: true },
+  lastSeen: { type: Date, default: null },
+  active: { type: Boolean, default: true, index: true },
+}, { timestamps: true }));
+
 const Alert = mongoose.model('Alert', new Schema({
   graphId: String,
   graphName: String,
@@ -41,4 +53,4 @@ async function ensureTelemetryCollection(db, retentionDays) {
   return db.collection('telemetry');
 }
 
-module.exports = { User, Graph, Alert, ensureTelemetryCollection };
+module.exports = { User, Graph, Device, Alert, ensureTelemetryCollection };
