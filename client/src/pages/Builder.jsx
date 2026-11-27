@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, { Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, MarkerType } from 'reactflow';
 import {
   Save, Play, Square, ShieldCheck, FilePlus, Sparkles, Upload, Download, Trash2, Copy,
-  AlertCircle, CheckCircle2, AlertTriangle, MousePointerClick, Braces, SlidersHorizontal,
+  AlertCircle, CheckCircle2, AlertTriangle, MousePointerClick, Braces, SlidersHorizontal, X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useLive } from '../LiveContext';
@@ -39,6 +39,7 @@ export default function Builder({ userId }) {
   const [rf, setRf] = useState(null);
   const [panel, setPanel] = useState('inspect');
   const [issues, setIssues] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [saved, setSaved] = useState('');
   const [loadedForUser, setLoadedForUser] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -138,7 +139,7 @@ export default function Builder({ userId }) {
     const es = (g.edges || []).map(decorate);
     setNodes(ns); setEdges(es);
     setMeta({ id: g.id || null, name: g.name || 'Untitled rule', active: !!g.active });
-    setIssues(null); resetNodeValues();
+    setIssues(null); setActionError(null); resetNodeValues();
     if (markSaved) setSaved(JSON.stringify(graphData(g.name || 'Untitled rule', ns, es)));
     setTimeout(() => rf && rf.fitView({ padding: 0.2, duration: 400 }), 60);
   }, [rf, setNodes, setEdges, resetNodeValues]);
@@ -174,29 +175,51 @@ export default function Builder({ userId }) {
     setMeta({ id: g.id, name: g.name, active: g.active });
     setSaved(JSON.stringify(body));
     refreshList();
-    if (g.warning) toast(g.warning, 'error');
+    if (g.warning) {
+      const warning = { errors: [], warnings: [g.warning] };
+      setIssues(warning);
+      setActionError({ kind: 'warning', title: 'Graph saved with a warning', message: g.warning });
+      setPanel('checks');
+    } else {
+      setActionError(null);
+    }
     return g;
   };
 
-  const run = (fn) => async (...a) => {
+  const run = (operation, fn) => async (...a) => {
     setBusy(true);
+    setActionError(null);
     try { await fn(...a); } catch (e) {
-      if (e.errors) { setIssues({ errors: e.errors, warnings: [] }); setPanel('checks'); toast(e.message, 'error'); } else toast(e.message, 'error');
+      const errors = Array.isArray(e.errors) ? e.errors : [];
+      const message = e.message || `The graph could not be ${operation.toLowerCase()}.`;
+      setActionError({
+        kind: 'error',
+        title: `Graph ${operation.toLowerCase()} failed`,
+        message,
+        errors,
+      });
+      if (errors.length) {
+        setIssues({ errors, warnings: [] });
+        setPanel('checks');
+      }
+      toast(`${operation} failed: ${message}`, 'error');
     } finally { setBusy(false); }
   };
 
-  const onSave = run(async () => { await save(); toast('Rule saved', 'success'); });
-  const onValidate = run(async () => { setIssues(await api.validate(serialize())); setPanel('checks'); });
-  const onDeploy = run(async () => {
+  const onSave = run('Save', async () => { await save(); toast('Rule saved', 'success'); });
+  const onValidate = run('Validation', async () => { setIssues(await api.validate(serialize())); setPanel('checks'); });
+  const onDeploy = run('Deploy', async () => {
     const g = await save();
     const res = await api.deploy(g.id);
     setMeta((m) => ({ ...m, active: true }));
     setIssues({ errors: [], warnings: res.warnings || [] });
+    setActionError(null);
+    if (res.warnings?.length) setPanel('checks');
     refreshList();
     toast('Rule deployed. Telemetry is now flowing through it.', 'success');
   });
-  const onStop = run(async () => { await api.undeploy(meta.id); setMeta((m) => ({ ...m, active: false })); resetNodeValues(); refreshList(); toast('Rule stopped', 'info'); });
-  const onDelete = run(async () => {
+  const onStop = run('Stop', async () => { await api.undeploy(meta.id); setMeta((m) => ({ ...m, active: false })); resetNodeValues(); refreshList(); toast('Rule stopped', 'info'); });
+  const onDelete = run('Delete', async () => {
     if (!meta.id || !window.confirm(`Delete "${meta.name}"? This can't be undone.`)) return;
     await api.deleteGraph(meta.id);
     applyGraph({ name: 'Untitled rule', nodes: [], edges: [] }); refreshList(); toast('Rule deleted', 'info');
@@ -285,6 +308,19 @@ export default function Builder({ userId }) {
           <input ref={fileRef} type="file" accept="application/json" hidden onChange={importJson} />
         </div>
         {meta.active && dirty && <div className="banner">This rule is live. Press <b>Save</b> to hot-reload your changes into the running stream.</div>}
+        {actionError && (
+          <div className={`banner action-banner ${actionError.kind}`} role="alert">
+            {actionError.kind === 'error' ? <AlertCircle size={16} /> : <AlertTriangle size={16} />}
+            <div className="action-banner-copy">
+              <strong>{actionError.title}</strong>
+              <span>{actionError.message}</span>
+            </div>
+            {actionError.errors?.length > 0 && (
+              <button className="btn ghost sm" onClick={() => { setPanel('checks'); setIssues({ errors: actionError.errors, warnings: [] }); }}>View issues</button>
+            )}
+            <button className="icon-btn" aria-label="Dismiss error" onClick={() => setActionError(null)}><X size={14} /></button>
+          </div>
+        )}
 
         <div className="canvas" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={onDrop}>
           <ReactFlow

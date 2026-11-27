@@ -82,6 +82,14 @@ main { flex: 1; min-height: 0; } .page { height: 100%; }
 .name-input { width: 220px; font-weight: 600; background: transparent; border-color: transparent; padding: 7px 9px; }
 .name-input:hover { border-color: var(--line2); }
 .banner { padding: 8px 16px; background: rgba(251,191,36,.1); color: #fcd34d; border-bottom: 1px solid rgba(251,191,36,.25); font-size: 12.5px; }
+.action-banner { display: flex; align-items: flex-start; gap: 10px; }
+.action-banner.error { background: rgba(248,113,113,.1); color: #fca5a5; border-bottom-color: rgba(248,113,113,.28); }
+.action-banner.warning { background: rgba(251,191,36,.1); color: #fcd34d; }
+.action-banner > svg { flex: none; margin-top: 1px; }
+.action-banner-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.action-banner-copy strong { color: currentColor; }
+.action-banner-copy span { color: var(--text); overflow-wrap: anywhere; }
+.action-banner .icon-btn { margin-left: auto; }
 .canvas { position: relative; flex: 1; min-height: 0; }
 .react-flow { background: transparent; }
 .react-flow__controls { box-shadow: var(--shadow); border-radius: 10px; overflow: hidden; border: 1px solid var(--line2); }
